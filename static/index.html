@@ -2,94 +2,236 @@
 <html lang="ja">
   <head>
     <meta charset="UTF-8" />
-    <title>Flight Info</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>羽田空港 到着便一覧</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   </head>
   <body>
-    <link rel="stylesheet" href="/css/style.css">
+    <div class="container">
+      <header class="header">
+        <div class="header-content">
+          <h1><i class="fas fa-plane-arrival"></i> 羽田空港 到着便一覧</h1>
+          <div class="status-info">
+            <div class="last-updated">
+              <i class="fas fa-clock"></i>
+              <span id="lastUpdated">更新中...</span>
+            </div>
+            <button id="refreshBtn" class="refresh-btn">
+              <i class="fas fa-sync-alt"></i> 更新
+            </button>
+          </div>
+        </div>
+      </header>
 
-    <h1>到着便一覧</h1>
-    <table border="1" id="flightTable">
-        <thead>
-            <tr>
-                <th>運行状況</th><th>到着時刻</th><th>出発地</th><th>機種</th><th>ターミナル</th>
-            </tr>
-        </thead>
-        <tbody>
-            <!-- データ行がここに入る -->
-        </tbody>
-    </table>
+      <main class="main-content">
+        <div class="flight-status-legend">
+          <h3><i class="fas fa-info-circle"></i> 運行状況の見方</h3>
+          <div class="legend-items">
+            <span class="legend-item arrived"><i class="fas fa-check"></i> 到着</span>
+            <span class="legend-item baggage"><i class="fas fa-suitcase"></i> 手荷物引渡中</span>
+            <span class="legend-item delayed"><i class="fas fa-clock"></i> 遅延</span>
+            <span class="legend-item cancelled"><i class="fas fa-times"></i> 欠航</span>
+          </div>
+        </div>
+
+        <div class="table-container">
+          <div id="loadingSpinner" class="loading-spinner">
+            <i class="fas fa-spinner fa-spin"></i>
+            <p>フライト情報を取得中...</p>
+          </div>
+          
+          <div id="errorMessage" class="error-message" style="display: none;">
+            <i class="fas fa-exclamation-triangle"></i>
+            <p>データの取得に失敗しました。しばらく後にもう一度お試しください。</p>
+          </div>
+
+          <table class="flight-table" id="flightTable" style="display: none;">
+            <thead>
+              <tr>
+                <th><i class="fas fa-info"></i> 運行状況</th>
+                <th><i class="fas fa-clock"></i> 到着時刻</th>
+                <th><i class="fas fa-map-marker-alt"></i> 出発地</th>
+                <th><i class="fas fa-plane"></i> 機種</th>
+                <th><i class="fas fa-building"></i> ターミナル</th>
+              </tr>
+            </thead>
+            <tbody>
+              <!-- データ行がここに入る -->
+            </tbody>
+          </table>
+
+          <div id="noFlights" class="no-flights" style="display: none;">
+            <i class="fas fa-plane"></i>
+            <h3>本日の到着便はありません</h3>
+            <p>現在表示できる到着便情報がありません。</p>
+          </div>
+        </div>
+      </main>
+
+      <footer class="footer">
+        <p>&copy; 2024 羽田空港 到着便情報システム | データ提供: 羽田空港公式</p>
+      </footer>
+    </div>
 
     <script>
-        async function fetchFlights() {
-            const res = await fetch('/api/flights');
-            const flights = await res.json();
+        class FlightApp {
+            constructor() {
+                this.isLoading = false;
+                this.init();
+            }
 
-            const tbody = document.querySelector('#flightTable tbody');
-            tbody.innerHTML = ''; // クリア
+            init() {
+                this.setupEventListeners();
+                this.fetchFlights();
+                // 5分ごとに自動更新
+                setInterval(() => this.fetchFlights(), 5 * 60 * 1000);
+            }
 
-            flights.forEach(flight => {
-              const tr = document.createElement('tr');
+            setupEventListeners() {
+                document.getElementById('refreshBtn').addEventListener('click', () => {
+                    this.fetchFlights();
+                });
+            }
 
-              const td1 = document.createElement('td');
-              td1.textContent = flight.flight_status;
+            async fetchFlights() {
+                if (this.isLoading) return;
+                
+                this.isLoading = true;
+                this.showLoading();
 
-              // 🔽 値に応じて背景色を設定
-              switch (flight.flight_status) {
-                case "遅延":
-                  td1.style.backgroundColor = "#fcccbe"; // 薄紅色
-                  break;
-                case "手荷物引渡中":
-                  td1.style.backgroundColor = "#ffff00"; // 黄色
-                  break;
-                case "到着":
-                  td1.style.backgroundColor = "#00ff00"; // 緑
-                  break;
-                case "欠航":
-                  td1.style.backgroundColor = "#ff0000"; // 赤
-                  break;
-                default:
-                  td1.style.backgroundColor = "#ffffff"; // 白
-              }
+                try {
+                    const response = await fetch('/api/flights');
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    
+                    const flights = await response.json();
+                    this.renderFlights(flights);
+                    this.updateLastUpdatedTime();
+                    this.hideError();
+                } catch (error) {
+                    console.error('Failed to fetch flights:', error);
+                    this.showError();
+                } finally {
+                    this.isLoading = false;
+                    this.hideLoading();
+                }
+            }
 
-              const td2 = document.createElement('td');
-              td2.textContent = flight.arrival_time;
+            showLoading() {
+                document.getElementById('loadingSpinner').style.display = 'flex';
+                document.getElementById('flightTable').style.display = 'none';
+                document.getElementById('noFlights').style.display = 'none';
+                document.getElementById('errorMessage').style.display = 'none';
+            }
 
-              const td3 = document.createElement('td');
-              td3.textContent = flight.place_of_departure;
+            hideLoading() {
+                document.getElementById('loadingSpinner').style.display = 'none';
+            }
 
-              const td4 = document.createElement('td');
-              td4.textContent = flight.aircraft_code;
+            showError() {
+                document.getElementById('errorMessage').style.display = 'flex';
+                document.getElementById('flightTable').style.display = 'none';
+                document.getElementById('noFlights').style.display = 'none';
+            }
 
-              const td5 = document.createElement('td');
-              td5.textContent = flight.terminal;
-              td5.style.textAlign = "center"; // 中央揃え
+            hideError() {
+                document.getElementById('errorMessage').style.display = 'none';
+            }
 
-              // 🔽 値に応じて背景色を設定
-              switch (flight.terminal) {
-                case "2":
-                  td5.style.color = "#ffffff"; // 白
-                  td5.style.backgroundColor = "#0082f0"; // 青
-                  break;
-                case "3":
-                  td5.style.color = "#ffffff"; // 白
-                  td5.style.backgroundColor = "#00afbd"; // エメラルドグリーン
-                  break;
-                default:
-                  td5.style.backgroundColor = "#ffffff"; // グレー（不明な値）
-              }
+            renderFlights(flights) {
+                const tbody = document.querySelector('#flightTable tbody');
+                tbody.innerHTML = '';
 
-              tr.appendChild(td1);
-              tr.appendChild(td2);
-              tr.appendChild(td3);
-              tr.appendChild(td4);
-              tr.appendChild(td5);
+                if (flights.length === 0) {
+                    document.getElementById('noFlights').style.display = 'flex';
+                    document.getElementById('flightTable').style.display = 'none';
+                    return;
+                }
 
-              tbody.appendChild(tr);
-            });
+                document.getElementById('flightTable').style.display = 'table';
+                document.getElementById('noFlights').style.display = 'none';
+
+                flights.forEach(flight => {
+                    const row = this.createFlightRow(flight);
+                    tbody.appendChild(row);
+                });
+            }
+
+            createFlightRow(flight) {
+                const tr = document.createElement('tr');
+
+                // 運行状況
+                const statusCell = document.createElement('td');
+                statusCell.className = `status-cell ${this.getStatusClass(flight.flight_status)}`;
+                statusCell.innerHTML = `<span class="status-badge">${flight.flight_status || '-'}</span>`;
+
+                // 到着時刻
+                const timeCell = document.createElement('td');
+                timeCell.className = 'time-cell';
+                timeCell.textContent = flight.arrival_time || '-';
+
+                // 出発地
+                const departureCell = document.createElement('td');
+                departureCell.className = 'departure-cell';
+                departureCell.textContent = flight.place_of_departure || '-';
+
+                // 機種
+                const aircraftCell = document.createElement('td');
+                aircraftCell.className = 'aircraft-cell';
+                aircraftCell.textContent = flight.aircraft_code || '-';
+
+                // ターミナル
+                const terminalCell = document.createElement('td');
+                terminalCell.className = `terminal-cell ${this.getTerminalClass(flight.terminal)}`;
+                terminalCell.innerHTML = `<span class="terminal-badge">${flight.terminal || '-'}</span>`;
+
+                tr.appendChild(statusCell);
+                tr.appendChild(timeCell);
+                tr.appendChild(departureCell);
+                tr.appendChild(aircraftCell);
+                tr.appendChild(terminalCell);
+
+                return tr;
+            }
+
+            getStatusClass(status) {
+                switch (status) {
+                    case "遅延": return "delayed";
+                    case "手荷物引渡中": return "baggage";
+                    case "到着": return "arrived";
+                    case "欠航": return "cancelled";
+                    default: return "unknown";
+                }
+            }
+
+            getTerminalClass(terminal) {
+                switch (terminal) {
+                    case "2": return "terminal-2";
+                    case "3": return "terminal-3";
+                    default: return "terminal-unknown";
+                }
+            }
+
+            updateLastUpdatedTime() {
+                const now = new Date();
+                const timeString = now.toLocaleTimeString('ja-JP', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                });
+                document.getElementById('lastUpdated').textContent = `最終更新: ${timeString}`;
+            }
         }
 
-        // ページ読み込み時に呼び出す
-        window.onload = fetchFlights;
+        // アプリケーション開始
+        document.addEventListener('DOMContentLoaded', () => {
+            new FlightApp();
+        });
     </script>
   </body>
 </html>
