@@ -11,7 +11,7 @@ async fn main() -> std::io::Result<()> {
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
 
     println!("🚀 Starting Airport Arrivals List Server...");
-    println!("📡 Server will be available at: http://127.0.0.1:8080");
+    println!("📡 Server will be available at: http://0.0.0.0:8080");
 
     HttpServer::new(|| {
         App::new()
@@ -20,7 +20,7 @@ async fn main() -> std::io::Result<()> {
             .service(health_check)
             .service(Files::new("/", "./static").index_file("index.html"))
     })
-    .bind("127.0.0.1:8080")?
+    .bind("0.0.0.0:8080")?
     .run()
     .await
 }
